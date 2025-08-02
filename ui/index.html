@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XP Progress Bar</title>
+
+    <style>
+        /* Fullscreen overlay */
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+
+            display: flex;
+            justify-content: center;
+            align-items: start;
+
+            opacity: 0;
+        }
+
+        /* Modal container */
+        .modal {
+
+            padding: 20px 40px;
+            border-radius: 15px;
+            text-align: center;
+            color: white;
+            font-family: fantasy, sans-serif;
+
+            max-width: 800px;
+            width: 80%;
+            animation: fadeIn 0.5s ease-in-out;
+            display: flex;
+            justify-items: center;
+            justify-content: center;
+            align-items: center;
+            align-content: center;
+
+        }
+
+        /* Title styling */
+        .modal h1 {
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+
+        /* Content flexbox */
+        .modal-content {
+            display: flex;
+            align-items: center;
+            width: 50%;
+            height: 50%;
+            justify-content: center;
+        }
+
+
+        /* Text styling */
+        .modal-text {
+            font-size: 18px;
+            text-align: left;
+        }
+
+        /* Fade-in animation */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+
+    <style>
+        body {
+            font-family: fangsong, sans-serif;
+            text-align: center;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .progress-container {
+
+            width: fit-content;
+
+
+            background-color: #333;
+            border-radius: 10px;
+            padding: 10px;
+            margin: 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+        }
+
+        .progress-bar-wrapper {
+            flex-grow: 1;
+            margin: 0 10px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .progress-bar {
+            display: flex;
+            gap: 2px;
+            justify-content: space-between;
+        }
+
+        .block {
+            width: 2vh;
+            height: 2vh;
+            background-color: rgba(255, 255, 255, 0.25);
+            clip-path: polygon(0.75vh 0, 100% 0, 100% 0, 100% 100%, 100% 100%, 0 100%, 0 100%, 0 0.75vh);
+            transition: background-color 0.3s, transform 0.3s;
+            border-radius: 0.5vh;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+
+        .filled {
+            background: linear-gradient(135deg, #9b59b6, #6a0dad);
+        }
+
+        .level-text {
+
+            text-align: center;
+
+        }
+
+
+        .main-container {
+            transform: translateY(500px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .main-container-show {
+            transform: translateY(0px) !important;
+        }
+
+        .xp-display {
+            margin-bottom: -15px;
+        }
+
+
+    </style>
+</head>
+<body>
+<div class="overlay" id="overlay">
+    <!-- Modal Box -->
+    <div class="modal">
+        <div class="modal-content">
+            <img width="100%" src="./level2.png" alt="Diamond" id="reward-image"> <!-- Replace with your image -->
+        </div>
+    </div>
+</div>
+<div style="color: black" id="xper"></div>
+<div class="main-container" id="main-container">
+    <div class="xp-display" id="xp-display"></div>
+    <div class="progress-container">
+        <span id="currentLevel" class="level-text">1000</span>
+        <div class="progress-bar-wrapper">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <span id="nextLevel" class="level-text">2000</span>
+    </div>
+</div>
+
+<script>
+    // Define visual constants and variables
+    const blocks = 15; // Total number of blocks in the progress bar
+    let xpAnimationInterval = null; // To handle animation intervals for XP changes
+    let showInterval = null; // Timer to show/hide the container during animations
+
+    // Function to send XP and level updates via postMessage
+    function sendXPUpdate(currentXP, level, xpNeeded, xpWithinLevel, levels) {
+
+    }
+
+    // Event listener for receiving new XP/state data via postMessage
+    window.addEventListener("message", (event) => {
+        const data = event.data;
+
+        if (event.data.xp !== undefined) {
+            updateUIWithCumulativeXP(data.xp, data.levels, data.levelLabels);
+        } else if (event.data.levelup !== undefined) {
+            showLevelUpMessage(event.data);
+        }
+        // Validate incoming data
+        if (data && typeof data.xp === "number" && Array.isArray(data.levels)) {
+
+        } else {
+            console.error("Invalid data received:", data);
+        }
+    });
+
+    const showLevelUpMessage = (data) => {
+        console.log("updating to", data.level)
+        document.getElementById("reward-image").src = `./level${data.level}.png`
+        const overlay = document.getElementById("overlay");
+        overlay.style.opacity = 1;
+        setTimeout(() => {
+            overlay.style.opacity = 0;
+        }, 10000);
+    }
+
+    /**
+     * Calculate the player's level and progress based on cumulative XP.
+     * @param {number} cumulativeXP - Total cumulative XP of the player.
+     * @param {number[]} levels - Array of level XP thresholds (cumulative total XP required for each level).
+     */
+    function updateUIWithCumulativeXP(cumulativeXP, levels, levelLabels) {
+        let level = 1; // Default to level 1
+        let xpNeeded = levels[0]; // XP required for level 1 to reach level 2
+        let xpWithinLevel = cumulativeXP; // Remaining XP within the current level
+
+        // Find the current level by iterating through the levels array
+        for (let i = 0; i < levels.length; i++) {
+            if (cumulativeXP < levels[i]) {
+                level = i + 1; // Correct 1-based index for level
+                xpNeeded = levels[i] - (levels[i - 1] || 0); // XP needed for the current level
+                xpWithinLevel = cumulativeXP - (levels[i - 1] || 0); // XP in the current level
+                break;
+            }
+        }
+
+        // Handle case where XP exceeds the highest level in the array
+        if (cumulativeXP >= levels[levels.length - 1]) {
+            level = levels.length; // Max level
+            xpNeeded = 0; // No next level XP needed
+            xpWithinLevel = levels[levels.length - 1]; // Cap at max XP
+        }
+
+        // Update the progress bar and UI
+        resetUI(cumulativeXP, level, xpNeeded, xpWithinLevel, levels, levelLabels);
+    }
+
+    // Reset the UI based on current level, xp, and progression
+    function resetUI(cumulativeXP, level, xpNeeded, xpWithinLevel, levels, levelLabels) {
+        // Update level and XP display
+        const label = levelLabels[level - 1]
+        document.getElementById("currentLevel").innerText = level;
+        document.getElementById("nextLevel").innerText = level + 1 <= levels.length ? level + 1 : "MAX";
+        document.getElementById("xp-display").innerText = label;
+
+        // Reset progress bar with the current XP
+        resetProgressBar(xpWithinLevel, xpNeeded);
+
+        // Show animation for the main container
+        showProgressBar();
+
+        // Optionally, send the state back to listeners
+        sendXPUpdate(cumulativeXP, level, xpNeeded, xpWithinLevel, levels);
+    }
+
+    // Reset the visual progress bar based on current XP within the current level
+    function resetProgressBar(currentXP, xpNeeded) {
+    const percentage = xpNeeded > 0 ? Math.min((currentXP / xpNeeded) * 100, 100) : 0; // Cap percentage
+    const filledBlocks = Math.floor((percentage / 100) * blocks); // Calculate filled blocks
+    const progressBar = document.getElementById("progressBar");
+
+    // Clear the current progress bar
+    progressBar.innerHTML = "";
+
+    for (let i = 0; i < blocks; i++) {
+        const block = document.createElement("div");
+        block.classList.add("block");
+
+        // Always fill the first block if there's XP
+        if (i === 0 && currentXP > 0) {
+            block.classList.add("filled");
+        }
+        // Fill blocks progressively based on XP percentage
+        else if (i < filledBlocks) {
+            block.classList.add("filled");
+        }
+
+        progressBar.appendChild(block);
+    }
+}
+
+    // Display the progress bar with a smooth animation
+    function showProgressBar() {
+        const container = document.getElementById("main-container");
+
+        container.classList.add("main-container-show");
+        if (showInterval) {
+            clearTimeout(showInterval);
+        }
+
+        // Hide the container after 5 seconds
+        showInterval = setTimeout(() => {
+            container.classList.remove("main-container-show");
+        }, 5000);
+    }
+
+    // Initialize the page with an empty progress bar
+    function createEmptyBar() {
+        const progressBar = document.getElementById("progressBar");
+
+        progressBar.innerHTML = ""; // Clear the progress bar
+        for (let i = 0; i < blocks; i++) {
+            let block = document.createElement("div");
+            block.classList.add("block");
+            progressBar.appendChild(block);
+        }
+    }
+
+    // Setup event handlers for testing/demo purposes
+    window.onload = () => {
+        const levelLabels = ["Novice Explorer",       // 2500 XP
+            "Apprentice Adventurer", // 5000 XP
+            "Skilled Pathfinder",    // 10000 XP
+            "Seasoned Wanderer",     // 20000 XP
+            "Expert Voyager",        // 30000 XP
+            "Master Navigator",      // 40000 XP
+            "Elite Trailblazer",     // 50000 XP
+            "Legendary Pioneer",     // 80000 XP
+            "Mythic Conqueror"       // 100000 XP]
+        ];
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "z") {
+                // Simulated small XP increase test
+                const levels = [2500, 5000, 10000, 20000, 30000, 40000, 50000, 80000, 100000];
+                const xp = 2553; // Current cumulative XP (level 2, partially through level 3)
+                updateUIWithCumulativeXP(xp, levels, levelLabels);
+            } else if (e.key === "a") {
+                console.log("keyhit");
+                // Simulate a large XP gain test
+                const levels = [2500, 5000, 10000, 20000, 30000, 40000, 50000, 80000, 100000];
+                const xp = 55000; // Current cumulative XP (level 7, nearly to level 8)
+                updateUIWithCumulativeXP(xp, levels, levelLabels);
+            }
+        });
+    };
+
+    // Create an empty progress bar on page load
+    createEmptyBar();
+</script>
+</body>
+</html>
